@@ -12,17 +12,17 @@ if os.getenv("NO_JIT") == "1":  # pragma: no cover
     )
 
     # If we're not JIT-compiling, just typecheck:
-    def jit(*static_argnums) -> Callable[[Callable], Callable]:
+    def check_and_compile(*static_argnums) -> Callable[[Callable], Callable]:
         return jaxtyped(typechecker=beartype)  # itself a function
 
 else:  # pragma: no cover
 
-    from jax import jit as jax_jit
+    from jax import jit
     from jax.experimental.checkify import checkify, all_checks
 
     # There's lots of functions returning functions here,
     # so I've left copious documentation to clarify what everything does:
-    def jit(*static_argnums) -> Callable[[Callable], Callable]:
+    def check_and_compile(*static_argnums) -> Callable[[Callable], Callable]:
 
         def partially_applied(f: Callable) -> Callable:
 
@@ -52,7 +52,7 @@ else:  # pragma: no cover
             def handle_err(*args, **kwargs):
 
                 # JIT-compile the above wrapped function:
-                g = jax_jit(checkified, static_argnums=static_argnums)
+                g = jit(checkified, static_argnums=static_argnums)
 
                 # Call it:
                 err, y = g(*args, **kwargs)
