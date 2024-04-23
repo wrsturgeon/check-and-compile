@@ -18,7 +18,7 @@ from jax import numpy as jnp
 from jax.experimental.checkify import check
 from jaxtyping import Array, Float
 
-@check_and_compile(1, 3)  # arguments like (1, 3) are static argument indices
+@check_and_compile(1, 3)  # (1, 3) are static argument indices
 def f(
     x: Float[Array, "a b c"],
     static_option: bool,
@@ -69,7 +69,7 @@ f(jnp.zeros([1, 2, 3]), True, jnp.ones([1, 2, 3]), True)  # second check fails
 
 This package uses [Nix](https://github.com/nixos/nix) for fully reproducible builds.
 
-It works will all versions of Python, so instead of providing `packages.${system}.default`,
+It works with all versions of Python, so instead of providing `packages.${system}.default`,
 it provides `lib.with-pkgs`, which you can use like this:
 
 ```nix
