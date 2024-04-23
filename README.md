@@ -3,9 +3,9 @@
 This is a thin wrapper around [JAX](https://github.com/google/jax)'s `jit` and `checkify`,
 as well as [`jaxtyping`](https://github.com/patrick-kidger/jaxtyping)'s `jaxtyped`.
 
-If this works fantastically, all credit is theirs for building these fantastic tools!
+If this works well, then all credit goes to the authors of the above!
 
-There's not much _new_ here; it's just a useful tool that I find makes life significantly easier.
+There's not much _new_ here; it's just a tool that I find makes life significantly easier.
 
 ## Use
 
@@ -18,7 +18,7 @@ from jax import numpy as jnp
 from jax.experimental.checkify import check
 from jaxtyping import Array, Float
 
-@check_and_compile(1, 3)  # (1, 3, ...) are the indices of static arguments!
+@check_and_compile(1, 3)  # arguments like (1, 3) are static argument indices
 def f(
     x: Float[Array, "a b c"],
     static_option: bool,
