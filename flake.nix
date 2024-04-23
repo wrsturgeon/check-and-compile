@@ -78,7 +78,6 @@
             installPhase = ''
               mkdir -p $out/${pypkgs.python.sitePackages}
               mv ./${pyname} $out/${pypkgs.python.sitePackages}/${pyname}
-              mv ./test.py $out/test.py
 
               mkdir -p $out/bin
               echo "${exec}" > $out/bin/${pname}
