@@ -29,6 +29,17 @@ else:  # pragma: no cover
             # Define a wrapped function that we'll compile below:
             def checkified(*args, **kwargs):
 
+                # Get this function's name:
+                name: str = getattr(f, "__qualname__", "an unnamed function")
+
+                # Give a disclaimer on keyword arguments:
+                if kwargs and (os.getenv("CHECK_AND_COMPILE_SILENT") != "1"):
+                    print(
+                        f"*** NOTE: {name} received keyword arguments {kwargs.keys()}."
+                        " Keyword arguments don't often work well with JAX's JIT static arguments."
+                        " It might work, but if you can, please try to make them positional instead!"
+                    )
+
                 # Type-check the function:
                 g = jaxtyped(f, typechecker=beartype)
 
@@ -41,7 +52,6 @@ else:  # pragma: no cover
                 # Functions are JIT-compiled the first time they return,
                 # so print a message so we can visualize compilation times:
                 if os.getenv("CHECK_AND_COMPILE_SILENT") != "1":
-                    name: str = getattr(f, "__qualname__", "an unnamed function")
                     print(f"Compiling {name}...")
 
                 # Return the output (and, implicitly, kickstart JIT-compilation):
