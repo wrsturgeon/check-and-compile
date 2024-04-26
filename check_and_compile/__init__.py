@@ -7,8 +7,8 @@ import os
 if os.getenv("NO_JIT") == "1":  # pragma: no cover
 
     print(
-        "*** NOTE: `NO_JIT` environment variable is `1`, "
-        "so no functions marked `@check_and_compile(...)` will be compiled!"
+        "*** NOTE: `NO_JIT` environment variable is `1`, so "
+        "functions marked `@check_and_compile(...)` will *not* be compiled!"
     )
 
     # If we're not JIT-compiling, just typecheck:
@@ -17,7 +17,7 @@ if os.getenv("NO_JIT") == "1":  # pragma: no cover
 
 else:  # pragma: no cover
 
-    from jax import jit
+    from jax import core, jit, numpy as jnp
     from jax.experimental.checkify import checkify, all_checks
 
     # There's lots of functions returning functions here,
@@ -50,16 +50,18 @@ else:  # pragma: no cover
                 y = g(*args, **kwargs)
 
                 # Functions are JIT-compiled the first time they return,
-                # so print a message so we can visualize compilation times:
+                # so print a message s.t. we can visualize compilation times:
                 if os.getenv("CHECK_AND_COMPILE_SILENT") != "1":
                     print(f"Compiling {name}...")
 
                 # Return the output (and, implicitly, kickstart JIT-compilation):
                 return y
 
+            f_not_compiled = jaxtyped(typechecker=beartype)(f)
+
             # The above function returns a (possible) error as well as its input,
             # so we need to make sure we don't forget to check the error & blow past it:
-            def handle_err(*args, **kwargs):
+            def f_compiled(*args, **kwargs):
 
                 # JIT-compile the above wrapped function:
                 g = jit(checkified, static_argnums=static_argnums)
@@ -73,8 +75,13 @@ else:  # pragma: no cover
                 # Otherwise, return the successful value:
                 return y
 
-            # Return the above function, batteries included:
-            return handle_err
+            # Check if we're already inside a compiled function;
+            # in that case, since JAX inlines everything,
+            # don't waste time compiling this as well.
+            # Check strategy taken from <https://github.com/google/jax/discussions/9241>
+            return lambda *args, **kwargs: (
+                f_not_compiled if isinstance(jnp.empty([]), core.Tracer) else f_compiled
+            )(*args, **kwargs)
 
         # Return a decorator that does all of the above to a function:
         return partially_applied
