@@ -1,87 +1,98 @@
 from beartype import beartype
 from beartype.typing import Callable
+from jax import core, jit, numpy as jnp
+from jax.experimental.checkify import checkify, all_checks
 from jaxtyping import jaxtyped
 import os
 
 
-if os.getenv("NO_JIT") == "1":  # pragma: no cover
-
+should_jit = os.getenv("NO_JIT") != "1"
+if not should_jit:
     print(
         "*** NOTE: `NO_JIT` environment variable is `1`, so "
         "functions marked `@check_and_compile(...)` will *not* be compiled!"
     )
 
-    # If we're not JIT-compiling, just typecheck:
-    def check_and_compile(*static_argnums) -> Callable[[Callable], Callable]:
-        return jaxtyped(typechecker=beartype)  # itself a function
 
-else:  # pragma: no cover
+# Check if we're already inside a compiled function.
+# In that case, since JAX inlines everything,
+# don't waste time compiling an internal function as well.
+# Check strategy taken from <https://github.com/google/jax/discussions/9241>
+def being_traced() -> bool:
+    return isinstance(jnp.empty([]), core.Tracer)
 
-    from jax import core, jit, numpy as jnp
-    from jax.experimental.checkify import checkify, all_checks
 
-    # There's lots of functions returning functions here,
-    # so I've left copious documentation to clarify what everything does:
-    def check_and_compile(*static_argnums) -> Callable[[Callable], Callable]:
+# There's lots of functions-returning-functions here,
+# so I've left copious documentation to clarify what everything does:
+def check_and_compile(*static_argnums) -> Callable[[Callable], Callable]:
 
-        def partially_applied(f: Callable) -> Callable:
+    def partially_applied(f: Callable) -> Callable:
 
-            # Define a wrapped function that we'll compile below:
-            def checkified(*args, **kwargs):
+        # Get this function's name:
+        name: str = getattr(f, "__qualname__", "an unnamed function")
 
-                # Get this function's name:
-                name: str = getattr(f, "__qualname__", "an unnamed function")
+        # Define a wrapped function that we'll compile below:
+        def checkified(*args, **kwargs):
 
-                # Give a disclaimer on keyword arguments:
-                if kwargs and (os.getenv("CHECK_AND_COMPILE_SILENT") != "1"):
-                    print(
-                        f"*** NOTE: {name} received keyword arguments {kwargs.keys()}."
-                        " Keyword arguments don't often work well with JAX's JIT static arguments."
-                        " It might work, but if you can, please try to make them positional instead!"
-                    )
+            # Type-check the function:
+            g = jaxtyped(f, typechecker=beartype)
 
-                # Type-check the function:
-                g = jaxtyped(f, typechecker=beartype)
+            # Functionalize runtime checks:
+            g = checkify(g, errors=all_checks)
 
-                # Functionalize runtime checks:
-                g = checkify(g, errors=all_checks)
+            # Call it:
+            y = g(*args, **kwargs)
 
-                # Call it:
-                y = g(*args, **kwargs)
+            # Return the output (and, implicitly, kickstart JIT-compilation):
+            return y
 
-                # Functions are JIT-compiled the first time they return,
-                # so print a message s.t. we can visualize compilation times:
-                if os.getenv("CHECK_AND_COMPILE_SILENT") != "1":
-                    print(f"Compiling {name}...")
+        # Define both functions now, since their exact IDs apparently matter to JAX:
 
-                # Return the output (and, implicitly, kickstart JIT-compilation):
-                return y
+        # The above function returns a (possible) error as well as its input,
+        # so we need to make sure we don't forget to check the error & blow past it:
+        def f_not_compiled(*args, **kwargs):
 
-            f_not_compiled = jaxtyped(typechecker=beartype)(f)
+            # Call it:
+            err, y = checkified(*args, **kwargs)
 
-            # The above function returns a (possible) error as well as its input,
-            # so we need to make sure we don't forget to check the error & blow past it:
-            def f_compiled(*args, **kwargs):
+            # If it wasn't successful, throw the error:
+            err.throw()
 
-                # JIT-compile the above wrapped function:
-                g = jit(checkified, static_argnums=static_argnums)
+            # Otherwise, return the successful value:
+            return y
 
-                # Call it:
-                err, y = g(*args, **kwargs)
+        # Functions are JIT-compiled the first time they return,
+        # so print a message s.t. we can visualize compilation times:
+        def with_message(*args, **kwargs):
 
-                # If it wasn't successful, throw the error:
-                err.throw()
+            y = checkified(*args, **kwargs)
 
-                # Otherwise, return the successful value:
-                return y
+            if os.getenv("CHECK_AND_COMPILE_SILENT") != "1":
+                print(f"Compiling {name}...")
 
-            # Check if we're already inside a compiled function;
-            # in that case, since JAX inlines everything,
-            # don't waste time compiling this as well.
-            # Check strategy taken from <https://github.com/google/jax/discussions/9241>
-            return lambda *args, **kwargs: (
-                f_not_compiled if isinstance(jnp.empty([]), core.Tracer) else f_compiled
-            )(*args, **kwargs)
+            return y
 
-        # Return a decorator that does all of the above to a function:
-        return partially_applied
+        # Same comment as the above function
+        def f_compiled(*args, **kwargs):
+
+            # JIT-compile the above wrapped function:
+            g = jit(with_message, static_argnums=static_argnums)
+
+            # Call it:
+            err, y = g(*args, **kwargs)
+
+            # If it wasn't successful, throw the error:
+            err.throw()
+
+            # Otherwise, return the successful value:
+            return y
+
+        def choose_at_runtime(*args, **kwargs):
+            compile_toplevel = should_jit and not being_traced()
+            call = f_compiled if compile_toplevel else f_not_compiled
+            return call(*args, **kwargs)
+
+        return choose_at_runtime
+
+    # Return a decorator that does all of the above to a function:
+    return partially_applied
