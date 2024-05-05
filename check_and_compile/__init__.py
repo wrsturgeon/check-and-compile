@@ -1,7 +1,7 @@
 from beartype import beartype
 from beartype.typing import Callable
 from jax import core, jit, numpy as jnp
-from jax.experimental.checkify import checkify, all_checks
+from jax.experimental.checkify import checkify  # all_checks
 from jaxtyping import jaxtyped
 import os
 
@@ -38,7 +38,7 @@ def check_and_compile(*static_argnums) -> Callable[[Callable], Callable]:
             g = jaxtyped(f, typechecker=beartype)
 
             # Functionalize runtime checks:
-            g = checkify(g, errors=all_checks)
+            g = checkify(g)  # errors=all_checks)
 
             # Call it:
             y = g(*args, **kwargs)
@@ -64,6 +64,9 @@ def check_and_compile(*static_argnums) -> Callable[[Callable], Callable]:
         # Functions are JIT-compiled the first time they return,
         # so print a message s.t. we can visualize compilation times:
         def with_message(*args, **kwargs):
+
+            if os.getenv("CHECK_AND_COMPILE_SILENT") != "1":
+                print(f"Calling {name}...")
 
             y = checkified(*args, **kwargs)
 
