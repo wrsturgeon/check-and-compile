@@ -1,0 +1,4 @@
+[project]
+name = "check_and_compile"
+version = "0.0.1"
+authors = [{name="Will Sturgeon", email="willstrgn@gmail.com"}]
