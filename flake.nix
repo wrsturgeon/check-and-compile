@@ -51,6 +51,7 @@
         pypkgs.buildPythonPackage {
           inherit pname version src;
           pyproject = true;
+          build-system = with pypkgs; [ setuptools ];
           dependencies = lookup-pkg-sets [ default-pkgs ] pypkgs;
         };
     }
